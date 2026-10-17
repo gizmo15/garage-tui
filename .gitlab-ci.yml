@@ -5,7 +5,7 @@ default:
   interruptible: true
   timeout: 10m
 
-image: "harbor.securmail.fr/rust/rust-ci:1.98.1-trixie"
+image: "harbor.securmail.fr/rust/rust-ci:1.99.0-trixie"
 
 stages:
   - lint
