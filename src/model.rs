@@ -158,6 +158,45 @@ pub fn human_bytes(bytes: u64) -> String {
     humansize::format_size(bytes, humansize::BINARY)
 }
 
+/// Snapshot shared by the unit tests of app and ui.
+#[cfg(test)]
+pub fn sample_snapshot() -> Snapshot {
+    let buckets = serde_json::json!([
+        {"id": "b1b1b1b1b1b1b1b1", "created": "2026-01-01T00:00:00Z", "globalAliases": ["photos"],
+         "keys": [{"accessKeyId": "GK1", "name": "backup", "permissions": {"read": true, "write": true, "owner": true}}],
+         "objects": 42, "bytes": 1073741824u64, "unfinishedUploads": 1,
+         "quotas": {"maxSize": 2147483648u64, "maxObjects": 100}},
+        {"id": "b2b2b2b2b2b2b2b2", "globalAliases": ["archives"], "keys": [],
+         "objects": 1000, "bytes": 1024, "quotas": {}},
+        {"id": "b3b3b3b3b3b3b3b3", "globalAliases": [], "keys": [],
+         "objects": 7, "bytes": 5000000, "quotas": {}}
+    ]);
+    let keys = serde_json::json!([
+        {"accessKeyId": "GK1", "name": "backup", "created": "2026-01-02T00:00:00Z",
+         "secretAccessKey": "s3cr3t", "permissions": {"createBucket": true},
+         "buckets": [{"id": "b1b1b1b1b1b1b1b1", "globalAliases": ["photos"], "permissions": {"read": true, "write": false, "owner": false}},
+                     {"id": "b3b3b3b3b3b3b3b3", "globalAliases": [], "permissions": {"read": true, "write": true, "owner": false}}]},
+        {"accessKeyId": "GK2", "name": "readonly", "expired": true, "expiration": "2026-02-01T00:00:00Z", "buckets": []}
+    ]);
+    let cluster = serde_json::json!({
+        "layoutVersion": 3,
+        "nodes": [
+            {"id": "aaaaaaaaaaaaaaaa", "isUp": true, "hostname": "node1", "role": {"zone": "dc1", "capacity": 1000},
+             "dataPartition": {"available": 400, "total": 1000}},
+            {"id": "bbbbbbbbbbbbbbbb", "isUp": true, "draining": true, "hostname": "node2", "role": {"zone": "dc2"},
+             "dataPartition": {"available": 50, "total": 1000}},
+            {"id": "cccccccccccccccc", "isUp": true, "role": {"zone": "dc3"},
+             "dataPartition": {"available": 200, "total": 1000}},
+            {"id": "dddddddddddddddd", "isUp": false}
+        ]
+    });
+    Snapshot {
+        buckets: serde_json::from_value(buckets).unwrap(),
+        keys: serde_json::from_value(keys).unwrap(),
+        cluster: serde_json::from_value(cluster).unwrap(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -180,6 +219,16 @@ mod tests {
         assert_eq!(status.nodes.len(), 2);
         assert!(status.nodes[1].role.is_none());
         assert_eq!(status.nodes[0].data_partition.as_ref().unwrap().total, 1000);
+    }
+
+    #[test]
+    fn names_fall_back_to_short_id() {
+        let snap = sample_snapshot();
+        assert_eq!(snap.buckets[2].name(), "b3b3b3b3b3b3");
+        assert_eq!(snap.keys[0].buckets[1].name(), "b3b3b3b3b3b3");
+        assert_eq!(snap.keys[0].buckets[0].name(), "photos");
+        assert_eq!(snap.buckets[1].quota_percent(), None);
+        assert_eq!(Perms::default().label(), "---");
     }
 
     #[test]

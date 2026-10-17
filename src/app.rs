@@ -30,7 +30,7 @@ impl Tab {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortBy {
     Name,
     Size,
@@ -235,4 +235,169 @@ fn clock() -> String {
         secs / 60 % 60,
         secs % 60
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::sample_snapshot;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn press(app: &mut App, c: char) -> Action {
+        app.on_key(key(KeyCode::Char(c)))
+    }
+
+    fn loaded() -> App {
+        let mut app = App::new(None);
+        app.set_result(Ok(sample_snapshot()));
+        app
+    }
+
+    fn names(app: &App) -> Vec<String> {
+        app.visible_buckets().iter().map(|b| b.name()).collect()
+    }
+
+    #[test]
+    fn set_result_stores_data_and_keeps_stale_on_error() {
+        let mut app = App::new(Some("warn".into()));
+        assert!(app.loading && app.snapshot.is_none());
+        app.set_result(Ok(sample_snapshot()));
+        assert!(!app.loading && app.error.is_none());
+        assert!(app.last_refresh.as_deref().unwrap().ends_with("UTC"));
+
+        app.set_result(Err("boom".into()));
+        assert_eq!(app.error.as_deref(), Some("boom"));
+        assert!(app.snapshot.is_some());
+        app.set_result(Ok(sample_snapshot()));
+        assert!(app.error.is_none());
+    }
+
+    #[test]
+    fn buckets_sorted_by_name_size_objects() {
+        let mut app = loaded();
+        assert_eq!(names(&app), ["archives", "b3b3b3b3b3b3", "photos"]);
+        press(&mut app, 's');
+        assert_eq!(app.sort, SortBy::Size);
+        assert_eq!(names(&app), ["photos", "b3b3b3b3b3b3", "archives"]);
+        press(&mut app, 's');
+        assert_eq!(app.sort.label(), "objects");
+        assert_eq!(names(&app), ["archives", "photos", "b3b3b3b3b3b3"]);
+        press(&mut app, 's');
+        assert_eq!(app.sort.label(), "name");
+    }
+
+    #[test]
+    fn filter_applies_to_buckets_and_keys() {
+        let mut app = loaded();
+        press(&mut app, '/');
+        assert!(app.editing_filter);
+        // 'q' and digits are text while editing, not commands
+        for c in "pHo".chars() {
+            press(&mut app, c);
+        }
+        assert_eq!(names(&app), ["photos"]);
+        app.on_key(key(KeyCode::Backspace));
+        assert_eq!(app.filter, "pH");
+        app.on_key(key(KeyCode::Enter));
+        assert!(!app.editing_filter);
+
+        app.tab = Tab::Keys;
+        app.filter = "gk2".into();
+        assert_eq!(app.visible_keys().len(), 1);
+        app.filter = "backup".into();
+        assert_eq!(app.visible_keys()[0].access_key_id, "GK1");
+
+        app.on_key(key(KeyCode::Esc));
+        assert!(app.filter.is_empty());
+        assert_eq!(app.visible_keys().len(), 2);
+    }
+
+    #[test]
+    fn filter_edit_can_be_cancelled_with_esc() {
+        let mut app = loaded();
+        press(&mut app, '/');
+        press(&mut app, 'z');
+        app.on_key(key(KeyCode::Esc));
+        assert!(!app.editing_filter);
+        // no match: selection is cleared and moving does nothing
+        assert!(app.buckets_state.selected().is_none());
+        press(&mut app, 'j');
+        assert!(app.buckets_state.selected().is_none());
+    }
+
+    #[test]
+    fn navigation_is_clamped() {
+        let mut app = loaded();
+        assert_eq!(app.buckets_state.selected(), Some(0));
+        press(&mut app, 'k');
+        assert_eq!(app.buckets_state.selected(), Some(0));
+        for _ in 0..10 {
+            app.on_key(key(KeyCode::Down));
+        }
+        assert_eq!(app.buckets_state.selected(), Some(2));
+        app.on_key(key(KeyCode::Up));
+        assert_eq!(app.buckets_state.selected(), Some(1));
+
+        app.tab = Tab::Keys;
+        press(&mut app, 'j');
+        press(&mut app, 'j');
+        assert_eq!(app.keys_state.selected(), Some(1));
+    }
+
+    #[test]
+    fn selection_survives_shrinking_list() {
+        let mut app = loaded();
+        app.buckets_state.select(Some(2));
+        app.filter = "arch".into();
+        app.set_result(Ok(sample_snapshot()));
+        assert_eq!(app.buckets_state.selected(), Some(0));
+    }
+
+    #[test]
+    fn tabs_switch_by_key_and_cycle() {
+        let mut app = loaded();
+        press(&mut app, '2');
+        assert!(app.tab == Tab::Keys);
+        press(&mut app, '3');
+        assert!(app.tab == Tab::Cluster);
+        // navigation on the cluster tab is a no-op
+        press(&mut app, 'j');
+        press(&mut app, '1');
+        assert!(app.tab == Tab::Buckets);
+        app.on_key(key(KeyCode::Tab));
+        app.on_key(key(KeyCode::Tab));
+        app.on_key(key(KeyCode::Tab));
+        assert!(app.tab == Tab::Buckets);
+        assert_eq!(Tab::Cluster.title(), "Cluster");
+        assert_eq!(Tab::Keys.index(), 1);
+    }
+
+    #[test]
+    fn quit_and_refresh_actions() {
+        let mut app = loaded();
+        assert!(matches!(press(&mut app, 'q'), Action::Quit));
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(matches!(app.on_key(ctrl_c), Action::Quit));
+        assert!(matches!(press(&mut app, 'x'), Action::None));
+
+        app.loading = false;
+        assert!(matches!(press(&mut app, 'r'), Action::Refresh));
+        assert!(app.loading);
+
+        assert!(!app.show_secret);
+        assert!(matches!(press(&mut app, 'S'), Action::Refresh));
+        assert!(app.show_secret);
+    }
+
+    #[test]
+    fn empty_app_has_no_rows() {
+        let mut app = App::new(None);
+        assert!(app.visible_buckets().is_empty() && app.visible_keys().is_empty());
+        press(&mut app, 'j');
+        app.set_result(Err("down".into()));
+        assert!(app.buckets_state.selected().is_none());
+    }
 }

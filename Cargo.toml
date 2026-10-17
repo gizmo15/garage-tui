@@ -23,3 +23,7 @@ lto = true           # link-time optimization
 codegen-units = 1    # better optimization, slower compile
 panic = "abort"      # removes unwinding machinery
 strip = true         # removes symbols automatically (Rust 1.70+)
+
+[dev-dependencies]
+tempfile = "3.27.0"
+wiremock = "0.6.5"

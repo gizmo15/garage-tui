@@ -74,6 +74,49 @@ mod tests {
         assert_eq!(c.refresh_secs(), 2);
     }
 
+    fn write_config(mode: u32) -> (tempfile::TempDir, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.yaml");
+        std::fs::write(&path, "admin_url: http://h:3903\nadmin_token: tok\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        (dir, path)
+    }
+
+    #[test]
+    fn loads_explicit_path_without_warning() {
+        let (_dir, path) = write_config(0o600);
+        let (config, warning) = load(Some(&path)).unwrap();
+        assert_eq!(config.admin_token, "tok");
+        assert!(warning.is_none());
+    }
+
+    #[test]
+    fn warns_when_file_is_world_readable() {
+        let (_dir, path) = write_config(0o644);
+        let (_, warning) = load(Some(&path)).unwrap();
+        assert!(warning.unwrap().contains("chmod 600"));
+    }
+
+    #[test]
+    fn missing_or_invalid_file_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = load(Some(&dir.path().join("nope.yaml"))).unwrap_err();
+        assert!(err.to_string().contains("cannot read config file"));
+
+        let bad = dir.path().join("bad.yaml");
+        std::fs::write(&bad, "admin_url: [").unwrap();
+        let err = load(Some(&bad)).unwrap_err();
+        assert!(format!("{err:#}").contains("in config file"));
+    }
+
+    #[test]
+    fn default_path_ends_with_app_config() {
+        if let Some(path) = default_path() {
+            assert!(path.ends_with("garage-tui/config.yaml"));
+        }
+    }
+
     #[test]
     fn default_refresh_and_validation() {
         let c = Config::from_yaml("admin_url: u\nadmin_token: t\n").unwrap();

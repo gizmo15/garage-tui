@@ -79,3 +79,120 @@ fn status_line(app: &App, url: &str) -> Line<'static> {
     }
     Line::from(spans)
 }
+
+#[cfg(test)]
+mod tests {
+    use ratatui::{Terminal, backend::TestBackend};
+
+    use super::*;
+    use crate::model::sample_snapshot;
+
+    fn render(app: &mut App) -> String {
+        let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, app, "http://garage:3903"))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        buffer
+            .content()
+            .chunks(buffer.area.width as usize)
+            .map(|row| row.iter().map(|c| c.symbol()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn loaded(tab: Tab) -> App {
+        let mut app = App::new(None);
+        app.set_result(Ok(sample_snapshot()));
+        app.tab = tab;
+        app
+    }
+
+    #[test]
+    fn buckets_tab_shows_sizes_quota_and_detail() {
+        let out = render(&mut loaded(Tab::Buckets));
+        assert!(out.contains("Buckets (3)"));
+        assert!(out.contains("photos"));
+        assert!(out.contains("1 GiB"));
+        assert!(out.contains("50%"));
+        assert!(out.contains("http://garage:3903"));
+        assert!(out.contains("refreshed"));
+        // first row (archives) is selected: no keys, no quota
+        assert!(out.contains("1000"));
+    }
+
+    #[test]
+    fn buckets_detail_lists_keys_of_selected_bucket() {
+        let mut app = loaded(Tab::Buckets);
+        app.buckets_state.select(Some(2));
+        let out = render(&mut app);
+        assert!(out.contains("RWO backup"));
+        assert!(out.contains("pending uploads: 1"));
+        assert!(out.contains("size 2 GiB"));
+    }
+
+    #[test]
+    fn keys_tab_masks_secret_until_revealed() {
+        let mut app = loaded(Tab::Keys);
+        app.keys_state.select(Some(0));
+        let out = render(&mut app);
+        assert!(out.contains("Keys (2)"));
+        assert!(out.contains("GK1"));
+        assert!(out.contains("********"));
+        assert!(!out.contains("s3cr3t"));
+        assert!(out.contains("RW-  b3b3b3b3b3b3") || out.contains("R--  photos"));
+
+        app.show_secret = true;
+        assert!(render(&mut app).contains("s3cr3t"));
+
+        app.keys_state.select(Some(1));
+        let out = render(&mut app);
+        assert!(out.contains("expired"));
+        assert!(out.contains("2026-02-01"));
+    }
+
+    #[test]
+    fn cluster_tab_shows_nodes_and_gauges() {
+        let out = render(&mut loaded(Tab::Cluster));
+        assert!(out.contains("layout v3"));
+        assert!(out.contains("3 buckets"));
+        assert!(out.contains("node1"));
+        assert!(out.contains("[dc1]"));
+        assert!(out.contains("draining"));
+        assert!(out.contains("DOWN"));
+        assert!(out.contains("60%"));
+        assert!(out.contains("95%"));
+        assert!(out.contains("no disk info"));
+    }
+
+    #[test]
+    fn empty_states_do_not_panic() {
+        let mut app = App::new(None);
+        for tab in Tab::ALL {
+            app.tab = tab;
+            let out = render(&mut app);
+            assert!(out.contains("loading..."));
+        }
+        let mut app = loaded(Tab::Buckets);
+        app.filter = "zzz".into();
+        assert!(render(&mut app).contains("no bucket"));
+        app.tab = Tab::Keys;
+        assert!(render(&mut app).contains("no key"));
+    }
+
+    #[test]
+    fn status_bar_shows_filter_warning_error_and_help() {
+        let mut app = loaded(Tab::Buckets);
+        app.warning = Some("file too open".into());
+        app.error = Some("HTTP 403".into());
+        app.filter = "pho".into();
+        let out = render(&mut app);
+        assert!(out.contains("filter: pho"));
+        assert!(out.contains("warning: file too open"));
+        assert!(out.contains("error: HTTP 403"));
+        assert!(out.contains("S: secrets off"));
+
+        app.editing_filter = true;
+        assert!(render(&mut app).contains("type to filter"));
+    }
+}

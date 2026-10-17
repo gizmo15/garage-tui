@@ -155,4 +155,102 @@ mod tests {
         };
         assert_eq!(err.to_string(), "/x: HTTP 500");
     }
+
+    use wiremock::matchers::{header, method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn json(body: &str) -> ResponseTemplate {
+        ResponseTemplate::new(200).set_body_raw(body.to_string(), "application/json")
+    }
+
+    async fn mount(server: &MockServer, route: &str, body: &str) {
+        Mock::given(method("GET"))
+            .and(path(route))
+            .and(header("authorization", "Bearer tok"))
+            .respond_with(json(body))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn snapshot_fetches_everything() {
+        let server = MockServer::start().await;
+        mount(&server, "/v2/ListBuckets", r#"[{"id":"b1"},{"id":"b2"}]"#).await;
+        for (id, alias) in [("b1", "one"), ("b2", "two")] {
+            Mock::given(method("GET"))
+                .and(path("/v2/GetBucketInfo"))
+                .and(query_param("id", id))
+                .respond_with(json(&format!(
+                    r#"{{"id":"{id}","globalAliases":["{alias}"],"objects":1,"bytes":10}}"#
+                )))
+                .mount(&server)
+                .await;
+        }
+        mount(&server, "/v2/ListKeys", r#"[{"id":"GK1"}]"#).await;
+        Mock::given(method("GET"))
+            .and(path("/v2/GetKeyInfo"))
+            .and(query_param("id", "GK1"))
+            .and(query_param("showSecretKey", "true"))
+            .respond_with(json(
+                r#"{"accessKeyId":"GK1","name":"k","secretAccessKey":"sek","buckets":[]}"#,
+            ))
+            .mount(&server)
+            .await;
+        mount(
+            &server,
+            "/v2/GetClusterStatus",
+            r#"{"layoutVersion":2,"nodes":[]}"#,
+        )
+        .await;
+
+        // trailing slash in the base url must be tolerated
+        let client = GarageClient::new(&format!("{}/", server.uri()), "tok").unwrap();
+        let snap = client.snapshot(true).await.unwrap();
+        assert_eq!(snap.buckets.len(), 2);
+        assert_eq!(snap.buckets[1].name(), "two");
+        assert_eq!(snap.keys[0].secret_access_key.as_deref(), Some("sek"));
+        assert_eq!(snap.cluster.layout_version, 2);
+    }
+
+    #[tokio::test]
+    async fn key_info_hides_secret_by_default() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v2/GetKeyInfo"))
+            .and(query_param("showSecretKey", "false"))
+            .respond_with(json(r#"{"accessKeyId":"GK1","name":"k"}"#))
+            .mount(&server)
+            .await;
+        let client = GarageClient::new(&server.uri(), "tok").unwrap();
+        let key = client.key_info("GK1", false).await.unwrap();
+        assert!(key.secret_access_key.is_none());
+    }
+
+    #[tokio::test]
+    async fn http_error_carries_garage_message() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v2/ListBuckets"))
+            .respond_with(ResponseTemplate::new(403).set_body_raw(
+                r#"{"code":"Forbidden","message":"Invalid bearer token"}"#,
+                "application/json",
+            ))
+            .mount(&server)
+            .await;
+        let client = GarageClient::new(&server.uri(), "bad").unwrap();
+        let err = client.list_buckets().await.unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "/v2/ListBuckets: HTTP 403 - Invalid bearer token"
+        );
+        assert!(client.snapshot(false).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn unreachable_server_is_an_http_error() {
+        let client = GarageClient::new("http://127.0.0.1:1", "tok").unwrap();
+        let err = client.cluster_status().await.unwrap_err();
+        assert!(matches!(err, ClientError::Http(_)));
+        assert!(err.to_string().starts_with("request failed"));
+    }
 }
