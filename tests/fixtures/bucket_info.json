@@ -1,0 +1,13 @@
+{
+  "id": "0123456789abcdef0123456789abcdef",
+  "created": "2026-01-01T00:00:00Z",
+  "globalAliases": ["photos"],
+  "websiteAccess": false,
+  "keys": [
+    {"accessKeyId": "GK1", "name": "backup", "permissions": {"read": true, "write": true, "owner": true}, "bucketLocalAliases": []}
+  ],
+  "objects": 42,
+  "bytes": 1073741824,
+  "unfinishedUploads": 0,
+  "quotas": {"maxSize": 2147483648, "maxObjects": null}
+}

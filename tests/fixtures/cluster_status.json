@@ -1,0 +1,10 @@
+{
+  "layoutVersion": 3,
+  "nodes": [
+    {"id": "aa", "isUp": true, "draining": false, "hostname": "node1", "addr": "10.0.0.1:3901",
+     "role": {"zone": "dc1", "capacity": 1000, "tags": []},
+     "dataPartition": {"available": 400, "total": 1000},
+     "metadataPartition": {"available": 50, "total": 100}},
+    {"id": "bb", "isUp": false, "draining": false, "hostname": null, "addr": null, "role": null}
+  ]
+}

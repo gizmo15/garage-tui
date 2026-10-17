@@ -1,0 +1,3 @@
+admin_url: http://127.0.0.1:3903
+admin_token: change-me   # [admin] admin_token from garage.toml
+refresh_secs: 5          # optional
