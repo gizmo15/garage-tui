@@ -1,4 +1,10 @@
 # .gitlab-ci.yml
+default:
+  tags:
+    - gizmo
+  interruptible: true
+  timeout: 10m
+
 image: "harbor.securmail.fr/rust/rust-ci:1.98.1-trixie"
 
 stages:
