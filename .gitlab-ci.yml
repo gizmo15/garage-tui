@@ -95,3 +95,15 @@ cargo:test:
     - if: $CI_COMMIT_TAG
       when: never
     - when: always
+
+cargo:build:
+  stage: build
+  variables:
+    UPLOAD_FILE_LOCAL: "${CI_PROJECT_DIR}/target/release/garage-ci"
+    UPLOAD_FILE: "garage-ci"
+  script:
+    - cargo build --release
+    - ls -Al ${CI_PROJECT_DIR}/target/release/
+    - curl -u ${NEXUS_USERNAME}:${NEXUS_PASSWORD} --upload-file ${UPLOAD_FILE_LOCAL} https://${NEXUS_SERVER}/repository/${NEXUS_REPOSITORY}/${UPLOAD_FILE}-${CI_COMMIT_TAG}
+  rules:
+    - if: $CI_COMMIT_TAG

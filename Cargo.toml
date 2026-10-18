@@ -1,5 +1,5 @@
 [package]
-name = "garage-tui"
+name = "garage-ci"
 version = "0.1.0"
 edition = "2024"
 
