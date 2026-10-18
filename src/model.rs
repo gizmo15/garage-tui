@@ -125,18 +125,34 @@ impl BucketInfo {
             .unwrap_or_else(|| self.id.chars().take(12).collect())
     }
 
-    /// True when a size quota is set and more than `QUOTA_WARN_PERCENT` of it is used.
+    /// True when the size or the object quota is more than `QUOTA_WARN_PERCENT` used.
     pub fn quota_nearly_full(&self) -> bool {
+        self.size_nearly_full() || self.objects_nearly_full()
+    }
+
+    pub fn size_nearly_full(&self) -> bool {
         self.quota_percent().is_some_and(|p| p > QUOTA_WARN_PERCENT)
+    }
+
+    pub fn objects_nearly_full(&self) -> bool {
+        self.objects_percent()
+            .is_some_and(|p| p > QUOTA_WARN_PERCENT)
     }
 
     /// Percentage of the size quota used, if a size quota is set.
     pub fn quota_percent(&self) -> Option<f64> {
-        self.quotas
-            .max_size
-            .filter(|max| *max > 0)
-            .map(|max| self.bytes as f64 * 100.0 / max as f64)
+        percent(self.bytes, self.quotas.max_size)
     }
+
+    /// Percentage of the object-count quota used, if one is set.
+    pub fn objects_percent(&self) -> Option<f64> {
+        percent(self.objects, self.quotas.max_objects)
+    }
+}
+
+fn percent(used: u64, max: Option<u64>) -> Option<f64> {
+    max.filter(|max| *max > 0)
+        .map(|max| used as f64 * 100.0 / max as f64)
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -346,5 +362,24 @@ mod tests {
         assert!(bucket(86, Some(100)).quota_nearly_full());
         assert!(!bucket(1000, None).quota_nearly_full());
         assert!(!bucket(1000, Some(0)).quota_nearly_full());
+    }
+
+    #[test]
+    fn object_quota_percent_and_warning() {
+        let bucket = |objects: u64, max_objects: Option<u64>| BucketInfo {
+            objects,
+            quotas: Quotas {
+                max_size: None,
+                max_objects,
+            },
+            ..Default::default()
+        };
+        assert_eq!(bucket(42, Some(100)).objects_percent(), Some(42.0));
+        assert_eq!(bucket(42, None).objects_percent(), None);
+        assert_eq!(bucket(42, Some(0)).objects_percent(), None);
+        assert!(!bucket(85, Some(100)).quota_nearly_full());
+        assert!(bucket(86, Some(100)).quota_nearly_full());
+        assert!(bucket(86, Some(100)).objects_nearly_full());
+        assert!(!bucket(86, Some(100)).size_nearly_full());
     }
 }

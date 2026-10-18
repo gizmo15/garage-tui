@@ -272,6 +272,29 @@ mod tests {
             buffer.content()[row * width + col].fg
         };
         assert_eq!(fg_of("95%"), Color::Red);
+        assert_eq!(fg_of("42 / 100"), Color::Reset);
         assert_ne!(fg_of("50%"), Color::Red);
+    }
+
+    #[test]
+    fn object_limit_is_shown_and_highlighted() {
+        let mut app = loaded(Tab::Buckets);
+        let out = render(&mut app);
+        assert!(out.contains("42 / 100"));
+
+        let snap = app.snapshot.as_mut().unwrap();
+        snap.buckets[0].objects = 90;
+        snap.buckets[0].quotas.max_objects = Some(100);
+        app.buckets_state.select(Some(2));
+        let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &mut app, "http://garage:3903"))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let text: String = buffer.content().iter().map(|c| c.symbol()).collect();
+        let at = text.find("90 / 100").expect("object limit rendered");
+        let at = text[..at].chars().count();
+        assert_eq!(buffer.content()[at].fg, Color::Red);
+        assert!(text.contains("(!90% used)"));
     }
 }

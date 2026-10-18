@@ -34,7 +34,7 @@ garage admin-token create garage-tui-ro --expires-in 90d \
 cargo run -- --config ./config.yaml
 ```
 
-Buckets using more than 85% of their size quota are highlighted in red.
+Buckets using more than 85% of their size or object-count quota are highlighted in red; the object limit is shown next to the count (`42 / 100`). Garage's counters can lag by a few seconds.
 
 ## Keys
 

@@ -8,6 +8,14 @@ use ratatui::{
 use crate::app::App;
 use crate::model::human_bytes;
 
+/// Suffix flagging a quota that is almost full.
+fn warn(hot: bool, percent: Option<f64>) -> String {
+    match percent {
+        Some(p) if hot => format!(" (!{p:.0}% used)"),
+        _ => String::new(),
+    }
+}
+
 pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
     let [list, detail] =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).areas(area);
@@ -20,19 +28,22 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
                 .quota_percent()
                 .map_or("-".to_string(), |p| format!("{p:.0}%"));
             let alert = Style::new().fg(Color::Red).add_modifier(Modifier::BOLD);
-            let (name, quota) = if b.quota_nearly_full() {
-                (
-                    Cell::new(b.name()).style(alert),
-                    Cell::new(quota).style(alert),
-                )
-            } else {
-                (Cell::new(b.name()), Cell::new(quota))
+            let cell = |text: String, hot: bool| {
+                if hot {
+                    Cell::new(text).style(alert)
+                } else {
+                    Cell::new(text)
+                }
+            };
+            let objects = match b.quotas.max_objects {
+                Some(max) => format!("{} / {max}", b.objects),
+                None => b.objects.to_string(),
             };
             Row::new(vec![
-                name,
+                cell(b.name(), b.quota_nearly_full()),
                 Cell::new(human_bytes(b.bytes)),
-                Cell::new(b.objects.to_string()),
-                quota,
+                cell(objects, b.objects_nearly_full()),
+                cell(quota, b.size_nearly_full()),
             ])
         })
         .collect();
@@ -47,19 +58,23 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
                 format!("aliases:  {}", b.global_aliases.join(", ")),
                 format!("created:  {}", b.created.as_deref().unwrap_or("-")),
                 format!("size:     {} ({} bytes)", human_bytes(b.bytes), b.bytes),
-                format!("objects:  {}", b.objects),
+                format!(
+                    "objects:  {}{}",
+                    b.objects,
+                    b.objects_percent().map_or(String::new(), |p| format!(
+                        " / {} ({p:.0}%)",
+                        b.quotas.max_objects.unwrap_or_default()
+                    ))
+                ),
                 format!("pending uploads: {}", b.unfinished_uploads),
                 format!(
-                    "quota:    size {}{} / objects {}",
+                    "quota:    size {}{} / objects {}{}",
                     b.quotas.max_size.map_or("none".into(), human_bytes),
-                    if b.quota_nearly_full() {
-                        format!(" (!{:.0}% used)", b.quota_percent().unwrap_or_default())
-                    } else {
-                        String::new()
-                    },
+                    warn(b.size_nearly_full(), b.quota_percent()),
                     b.quotas
                         .max_objects
                         .map_or("none".into(), |n| n.to_string()),
+                    warn(b.objects_nearly_full(), b.objects_percent()),
                 ),
                 String::new(),
                 "keys:".to_string(),
@@ -81,7 +96,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
         [
             Constraint::Fill(1),
             Constraint::Length(12),
-            Constraint::Length(10),
+            Constraint::Length(14),
             Constraint::Length(7),
         ],
     )
