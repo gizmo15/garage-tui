@@ -39,10 +39,16 @@ pub fn draw(frame: &mut Frame, app: &mut App, url: &str) {
     let help_text = if app.editing_filter {
         "type to filter - Enter/Esc: done".to_string()
     } else {
+        let secrets = if !app.can_reveal_secrets() {
+            String::new()
+        } else if app.show_secret {
+            "  S: secrets on".to_string()
+        } else {
+            "  S: secrets off".to_string()
+        };
         format!(
-            "Tab/1-3: tabs  j/k: move  /: filter  s: sort ({})  S: secrets {}  r: refresh  q: quit",
+            "Tab/1-3: tabs  j/k: move  /: filter  s: sort ({}){secrets}  r: refresh  q: quit",
             app.sort.label(),
-            if app.show_secret { "on" } else { "off" }
         )
     };
     frame.render_widget(
@@ -155,6 +161,20 @@ mod tests {
 
         app.show_secret = true;
         assert!(render(&mut app).contains("s3cr3t"));
+
+        app.set_token(Ok(crate::model::TokenInfo {
+            scope: vec!["ListKeys".into(), "GetKeyInfo".into()],
+            ..Default::default()
+        }));
+        app.show_secret = true;
+        let out = render(&mut app);
+        assert!(!out.contains("s3cr3t"));
+        assert!(out.contains("admin token required"));
+        assert!(!out.contains("S: secrets"));
+        app.set_token(Ok(crate::model::TokenInfo {
+            scope: vec!["*".into()],
+            ..Default::default()
+        }));
 
         app.keys_state.select(Some(1));
         let out = render(&mut app);

@@ -8,6 +8,7 @@ Version numbers match the `version` field in `Cargo.toml` and the corresponding 
 ## [Unreleased]
 
 ### Added
+- Secret keys can only be revealed (`S`) with an admin token (scope `*`) or the static config token; for any other token the key is disabled and the help line hides it. This is a UI safeguard: to truly prevent access, leave `GetKeyInfo` out of the token scope
 - Buckets whose size-quota usage exceeds 85% are shown in bold red in the list, and flagged in the detail pane
 - Token badge in the status bar (`admin`, `read-only`, `custom: N endpoints`, `expired`) from `GET /v2/GetCurrentAdminTokenInfo`; hidden when the lookup fails (static config token, older Garage)
 - Initial terminal UI (ratatui + crossterm) for Garage, read-only, based on the Garage Admin API v2 (Garage >= 2.0)

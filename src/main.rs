@@ -99,7 +99,7 @@ async fn run(
     let fetch = |app: &App| {
         let client = client.clone();
         let tx = tx.clone();
-        let show_secret = app.show_secret;
+        let show_secret = app.show_secret && app.can_reveal_secrets();
         tokio::spawn(async move {
             let result = client
                 .snapshot(show_secret)

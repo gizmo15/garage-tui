@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::widgets::TableState;
 
-use crate::model::{BucketInfo, KeyInfo, Snapshot, TokenInfo};
+use crate::model::{BucketInfo, KeyInfo, Snapshot, TokenInfo, TokenKind};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -99,6 +99,17 @@ impl App {
     /// A failed lookup (static config token, older Garage) just leaves the badge unknown.
     pub fn set_token(&mut self, result: Result<TokenInfo, String>) {
         self.token = result.ok();
+        if !self.can_reveal_secrets() {
+            self.show_secret = false;
+        }
+    }
+
+    /// Secrets are only revealed to an admin token. An unknown token (lookup failed)
+    /// is the static config token, which has every right.
+    pub fn can_reveal_secrets(&self) -> bool {
+        self.token
+            .as_ref()
+            .is_none_or(|t| t.kind() == TokenKind::Admin)
     }
 
     pub fn set_result(&mut self, result: Result<Snapshot, String>) {
@@ -214,6 +225,10 @@ impl App {
             KeyCode::Char('/') => self.editing_filter = true,
             KeyCode::Esc => self.filter.clear(),
             KeyCode::Char('s') => self.sort = self.sort.next(),
+            KeyCode::Char('S') if !self.can_reveal_secrets() => {
+                self.warning
+                    .get_or_insert_with(|| "secrets hidden: token is not admin".to_string());
+            }
             KeyCode::Char('S') => {
                 self.show_secret = !self.show_secret;
                 self.loading = true;
@@ -406,5 +421,29 @@ mod tests {
         press(&mut app, 'j');
         app.set_result(Err("down".into()));
         assert!(app.buckets_state.selected().is_none());
+    }
+
+    #[test]
+    fn secrets_are_refused_for_non_admin_token() {
+        let token = |scope: &[&str]| TokenInfo {
+            scope: scope.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        };
+        let mut app = App::new(None);
+        assert!(app.can_reveal_secrets());
+
+        app.set_token(Ok(token(&["ListKeys", "GetKeyInfo"])));
+        assert!(!app.can_reveal_secrets());
+        assert!(matches!(press(&mut app, 'S'), Action::None));
+        assert!(!app.show_secret);
+        assert!(app.warning.is_some());
+
+        app.set_token(Ok(token(&["*"])));
+        assert!(matches!(press(&mut app, 'S'), Action::Refresh));
+        assert!(app.show_secret);
+
+        // a non-admin token arriving after S was pressed turns the reveal off again
+        app.set_token(Ok(token(&["ListKeys"])));
+        assert!(!app.show_secret);
     }
 }

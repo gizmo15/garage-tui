@@ -44,6 +44,6 @@ Buckets using more than 85% of their size quota are highlighted in red.
 | `j` `k` / arrows | move |
 | `/` | filter (Enter/Esc to stop, Esc again to clear) |
 | `s` | sort buckets (name, size, objects) |
-| `S` | reveal / hide key secrets |
+| `S` | reveal / hide key secrets (admin token only) |
 | `r` | refresh now |
 | `q` | quit |
