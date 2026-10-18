@@ -217,4 +217,41 @@ mod tests {
         }));
         assert!(render(&mut app).contains("token: read-only"));
     }
+
+    #[test]
+    fn buckets_over_quota_threshold_are_highlighted() {
+        let mut app = loaded(Tab::Buckets);
+        let snap = app.snapshot.as_mut().unwrap();
+        snap.buckets[1].bytes = 1900;
+        snap.buckets[1].quotas.max_size = Some(2000);
+        app.buckets_state.select(Some(2));
+
+        let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &mut app, "http://garage:3903"))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let fg_of = |text: &str| {
+            let width = buffer.area.width as usize;
+            let row = buffer
+                .content()
+                .chunks(width)
+                .position(|r| {
+                    r.iter()
+                        .map(|c| c.symbol())
+                        .collect::<String>()
+                        .contains(text)
+                })
+                .unwrap_or_else(|| panic!("{text} not rendered"));
+            let col = buffer.content()[row * width..(row + 1) * width]
+                .iter()
+                .map(|c| c.symbol())
+                .collect::<String>()
+                .find(text)
+                .unwrap();
+            buffer.content()[row * width + col].fg
+        };
+        assert_eq!(fg_of("95%"), Color::Red);
+        assert_ne!(fg_of("50%"), Color::Red);
+    }
 }

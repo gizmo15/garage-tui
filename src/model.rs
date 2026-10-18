@@ -26,6 +26,9 @@ impl Perms {
     }
 }
 
+/// Size-quota usage above which a bucket is highlighted.
+pub const QUOTA_WARN_PERCENT: f64 = 85.0;
+
 /// Endpoints used by the app, all read-only.
 const READ_ONLY_SCOPE: &[&str] = &[
     "ListBuckets",
@@ -120,6 +123,11 @@ impl BucketInfo {
             .first()
             .cloned()
             .unwrap_or_else(|| self.id.chars().take(12).collect())
+    }
+
+    /// True when a size quota is set and more than `QUOTA_WARN_PERCENT` of it is used.
+    pub fn quota_nearly_full(&self) -> bool {
+        self.quota_percent().is_some_and(|p| p > QUOTA_WARN_PERCENT)
     }
 
     /// Percentage of the size quota used, if a size quota is set.
@@ -322,5 +330,21 @@ mod tests {
         assert!(!token(READ_ONLY_SCOPE).is_excessive());
         let expired: TokenInfo = serde_json::from_str(r#"{"expired":true,"scope":["*"]}"#).unwrap();
         assert_eq!(expired.label(), "expired");
+    }
+
+    #[test]
+    fn quota_warning_above_threshold_only() {
+        let bucket = |bytes: u64, max_size: Option<u64>| BucketInfo {
+            bytes,
+            quotas: Quotas {
+                max_size,
+                max_objects: None,
+            },
+            ..Default::default()
+        };
+        assert!(!bucket(85, Some(100)).quota_nearly_full());
+        assert!(bucket(86, Some(100)).quota_nearly_full());
+        assert!(!bucket(1000, None).quota_nearly_full());
+        assert!(!bucket(1000, Some(0)).quota_nearly_full());
     }
 }

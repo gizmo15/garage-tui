@@ -1,8 +1,8 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
-    style::{Modifier, Style},
-    widgets::{Block, Paragraph, Row, Table},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Cell, Paragraph, Row, Table},
 };
 
 use crate::app::App;
@@ -19,10 +19,19 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
             let quota = b
                 .quota_percent()
                 .map_or("-".to_string(), |p| format!("{p:.0}%"));
+            let alert = Style::new().fg(Color::Red).add_modifier(Modifier::BOLD);
+            let (name, quota) = if b.quota_nearly_full() {
+                (
+                    Cell::new(b.name()).style(alert),
+                    Cell::new(quota).style(alert),
+                )
+            } else {
+                (Cell::new(b.name()), Cell::new(quota))
+            };
             Row::new(vec![
-                b.name(),
-                human_bytes(b.bytes),
-                b.objects.to_string(),
+                name,
+                Cell::new(human_bytes(b.bytes)),
+                Cell::new(b.objects.to_string()),
                 quota,
             ])
         })
@@ -41,8 +50,13 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
                 format!("objects:  {}", b.objects),
                 format!("pending uploads: {}", b.unfinished_uploads),
                 format!(
-                    "quota:    size {} / objects {}",
+                    "quota:    size {}{} / objects {}",
                     b.quotas.max_size.map_or("none".into(), human_bytes),
+                    if b.quota_nearly_full() {
+                        format!(" (!{:.0}% used)", b.quota_percent().unwrap_or_default())
+                    } else {
+                        String::new()
+                    },
                     b.quotas
                         .max_objects
                         .map_or("none".into(), |n| n.to_string()),

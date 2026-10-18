@@ -34,6 +34,8 @@ garage admin-token create garage-tui-ro --expires-in 90d \
 cargo run -- --config ./config.yaml
 ```
 
+Buckets using more than 85% of their size quota are highlighted in red.
+
 ## Keys
 
 | Key | Action |
