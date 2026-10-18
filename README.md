@@ -2,6 +2,13 @@
 
 Terminal UI (ratatui) for [Garage](https://garagehq.deuxfleurs.fr): buckets with size/objects/quota, access keys with their per-bucket permissions, and disk usage per cluster node. Read-only, uses the Garage Admin API v2 (Garage >= 2.0).
 
+## Token
+
+Read only token :
+```bash
+garage admin-token create garage-ci-ro --scope ListBuckets,GetBucketInfo,ListKeys,GetKeyInfo,GetClusterStatus,GetCurrentAdminTokenInfo
+```
+
 ## Config
 
 YAML file with the admin URL and token (copy `config.example.yaml`, then `chmod 600`):
