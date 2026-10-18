@@ -19,7 +19,7 @@ impl Config {
     }
 
     pub fn from_yaml(content: &str) -> Result<Self> {
-        let config: Config = serde_yaml::from_str(content).context("invalid YAML config")?;
+        let config: Config = serde_saphyr::from_str(content).context("invalid YAML config")?;
         if config.admin_url.trim().is_empty() || config.admin_token.trim().is_empty() {
             bail!("admin_url and admin_token must not be empty");
         }
