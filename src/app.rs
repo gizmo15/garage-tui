@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::widgets::TableState;
 
-use crate::model::{BucketInfo, KeyInfo, Snapshot};
+use crate::model::{BucketInfo, KeyInfo, Snapshot, TokenInfo};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -74,6 +74,7 @@ pub struct App {
     pub warning: Option<String>,
     pub last_refresh: Option<String>,
     pub loading: bool,
+    pub token: Option<TokenInfo>,
 }
 
 impl App {
@@ -91,7 +92,13 @@ impl App {
             warning,
             last_refresh: None,
             loading: true,
+            token: None,
         }
+    }
+
+    /// A failed lookup (static config token, older Garage) just leaves the badge unknown.
+    pub fn set_token(&mut self, result: Result<TokenInfo, String>) {
+        self.token = result.ok();
     }
 
     pub fn set_result(&mut self, result: Result<Snapshot, String>) {

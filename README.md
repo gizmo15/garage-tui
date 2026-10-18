@@ -14,6 +14,13 @@ refresh_secs: 5   # optional
 
 Default path: `~/.config/garage-tui/config.yaml`. Use another file with `-c, --config <PATH>`.
 
+A read-only admin token is enough (the status bar shows its kind):
+
+```
+garage admin-token create garage-tui-ro --expires-in 90d \
+  --scope ListBuckets,GetBucketInfo,ListKeys,GetKeyInfo,GetClusterStatus,GetCurrentAdminTokenInfo
+```
+
 ## Run
 
 ```

@@ -14,7 +14,7 @@ use tokio::sync::mpsc;
 
 use app::{Action, App};
 use client::GarageClient;
-use model::Snapshot;
+use model::{Snapshot, TokenInfo};
 
 #[derive(Parser)]
 #[command(
@@ -31,6 +31,7 @@ enum AppEvent {
     Key(crossterm::event::KeyEvent),
     Tick,
     Data(Result<Snapshot, String>),
+    Token(Result<TokenInfo, String>),
 }
 
 #[tokio::main]
@@ -88,6 +89,13 @@ async fn run(
         }
     });
 
+    let token_client = client.clone();
+    let token_tx = tx.clone();
+    tokio::spawn(async move {
+        let result = token_client.token_info().await.map_err(|e| e.to_string());
+        let _ = token_tx.send(AppEvent::Token(result));
+    });
+
     let fetch = |app: &App| {
         let client = client.clone();
         let tx = tx.clone();
@@ -107,6 +115,7 @@ async fn run(
         match event {
             AppEvent::Tick => fetch(&app),
             AppEvent::Data(result) => app.set_result(result),
+            AppEvent::Token(result) => app.set_token(result),
             AppEvent::Key(key) => match app.on_key(key) {
                 Action::Quit => break,
                 Action::Refresh => fetch(&app),

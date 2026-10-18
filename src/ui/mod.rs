@@ -65,6 +65,17 @@ fn status_line(app: &App, url: &str) -> Line<'static> {
     if !app.filter.is_empty() || app.editing_filter {
         spans.push(Span::raw(format!("  | filter: {}", app.filter)));
     }
+    if let Some(token) = &app.token {
+        let color = if token.is_excessive() || token.expired {
+            Color::Yellow
+        } else {
+            Color::Green
+        };
+        spans.push(Span::styled(
+            format!("  | token: {}", token.label()),
+            Style::new().fg(color),
+        ));
+    }
     if let Some(w) = &app.warning {
         spans.push(Span::styled(
             format!("  | warning: {w}"),
@@ -194,5 +205,16 @@ mod tests {
 
         app.editing_filter = true;
         assert!(render(&mut app).contains("type to filter"));
+    }
+
+    #[test]
+    fn status_bar_shows_token_kind() {
+        let mut app = loaded(Tab::Buckets);
+        assert!(!render(&mut app).contains("token:"));
+        app.set_token(Ok(crate::model::TokenInfo {
+            scope: vec!["ListBuckets".into()],
+            ..Default::default()
+        }));
+        assert!(render(&mut app).contains("token: read-only"));
     }
 }

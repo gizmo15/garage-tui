@@ -26,6 +26,67 @@ impl Perms {
     }
 }
 
+/// Endpoints used by the app, all read-only.
+const READ_ONLY_SCOPE: &[&str] = &[
+    "ListBuckets",
+    "GetBucketInfo",
+    "ListKeys",
+    "GetKeyInfo",
+    "GetClusterStatus",
+    "GetCurrentAdminTokenInfo",
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenKind {
+    Admin,
+    ReadOnly,
+    Custom,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TokenInfo {
+    pub name: Option<String>,
+    pub expiration: Option<String>,
+    pub expired: bool,
+    pub scope: Vec<String>,
+}
+
+impl TokenInfo {
+    pub fn kind(&self) -> TokenKind {
+        if self.scope.iter().any(|s| s == "*") {
+            TokenKind::Admin
+        } else if !self.scope.is_empty()
+            && self
+                .scope
+                .iter()
+                .all(|s| s.starts_with("List") || s.starts_with("Get"))
+        {
+            TokenKind::ReadOnly
+        } else {
+            TokenKind::Custom
+        }
+    }
+
+    pub fn label(&self) -> String {
+        if self.expired {
+            return "expired".to_string();
+        }
+        match self.kind() {
+            TokenKind::Admin => "admin".to_string(),
+            TokenKind::ReadOnly => "read-only".to_string(),
+            TokenKind::Custom => format!("custom: {} endpoints", self.scope.len()),
+        }
+    }
+
+    /// True when the token grants more than the app needs.
+    pub fn is_excessive(&self) -> bool {
+        self.scope
+            .iter()
+            .any(|s| s == "*" || !READ_ONLY_SCOPE.contains(&s.as_str()))
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BucketSummary {
@@ -234,5 +295,32 @@ mod tests {
     #[test]
     fn formats_sizes() {
         assert_eq!(human_bytes(1024), "1 KiB");
+    }
+
+    fn token(scope: &[&str]) -> TokenInfo {
+        TokenInfo {
+            scope: scope.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn token_kind_from_scope() {
+        assert_eq!(token(&["*"]).kind(), TokenKind::Admin);
+        assert_eq!(
+            token(&["ListBuckets", "GetKeyInfo"]).kind(),
+            TokenKind::ReadOnly
+        );
+        assert_eq!(
+            token(&["ListBuckets", "CreateBucket"]).kind(),
+            TokenKind::Custom
+        );
+        assert_eq!(token(&[]).kind(), TokenKind::Custom);
+        assert_eq!(token(&["ListBuckets"]).label(), "read-only");
+        assert_eq!(token(&["*"]).label(), "admin");
+        assert!(token(&["*"]).is_excessive());
+        assert!(!token(READ_ONLY_SCOPE).is_excessive());
+        let expired: TokenInfo = serde_json::from_str(r#"{"expired":true,"scope":["*"]}"#).unwrap();
+        assert_eq!(expired.label(), "expired");
     }
 }

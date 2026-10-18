@@ -2,7 +2,9 @@ use futures::future::try_join_all;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
-use crate::model::{BucketInfo, BucketSummary, ClusterStatus, KeyInfo, KeySummary, Snapshot};
+use crate::model::{
+    BucketInfo, BucketSummary, ClusterStatus, KeyInfo, KeySummary, Snapshot, TokenInfo,
+};
 
 #[derive(Debug, Error)]
 pub enum ClientError {
@@ -100,6 +102,10 @@ impl GarageClient {
         self.get("/v2/GetClusterStatus", &[]).await
     }
 
+    pub async fn token_info(&self) -> Result<TokenInfo, ClientError> {
+        self.get("/v2/GetCurrentAdminTokenInfo", &[]).await
+    }
+
     pub async fn snapshot(&self, show_secret: bool) -> Result<Snapshot, ClientError> {
         let (buckets, keys, cluster) = tokio::try_join!(
             async {
@@ -170,6 +176,29 @@ mod tests {
             .respond_with(json(body))
             .mount(server)
             .await;
+    }
+
+    #[tokio::test]
+    async fn token_info_is_parsed() {
+        let server = MockServer::start().await;
+        mount(
+            &server,
+            "/v2/GetCurrentAdminTokenInfo",
+            r#"{"id":"t1","name":"ro","expired":false,"scope":["ListBuckets"]}"#,
+        )
+        .await;
+        let client = GarageClient::new(&server.uri(), "tok").unwrap();
+        let info = client.token_info().await.unwrap();
+        assert_eq!(info.name.as_deref(), Some("ro"));
+        assert_eq!(info.label(), "read-only");
+    }
+
+    #[tokio::test]
+    async fn token_info_unsupported_is_an_error() {
+        let server = MockServer::start().await;
+        let client = GarageClient::new(&server.uri(), "tok").unwrap();
+        let err = client.token_info().await.unwrap_err();
+        assert!(matches!(err, ClientError::Status { status: 404, .. }));
     }
 
     #[tokio::test]
