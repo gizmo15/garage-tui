@@ -31,8 +31,8 @@ Default path: `~/.config/garage-tui/config.yaml`. Use another file with `-c, --c
 `GARAGE_ADMIN_TOKEN` and `GARAGE_ADMIN_URL` override `admin_token` and `admin_url` from the file (blank values are ignored), so the token does not have to be stored on disk:
 
 ```bash
-GARAGE_ADMIN_TOKEN=xxxxxxxx garage-tui          # url from the file, token from the environment
-GARAGE_ADMIN_URL=https://garage:3903 GARAGE_ADMIN_TOKEN=xxxxxxxx garage-tui   # no file at all
+GARAGE_ADMIN_TOKEN=xxxxxxxx          # url from the file, token from the environment
+GARAGE_ADMIN_URL=https://garage:3903 # no file at all
 ```
 
 The default config file may be absent when both variables are set; a file given with `-c` must always exist. The "readable by others" warning only applies to a file that contains an `admin_token`.
