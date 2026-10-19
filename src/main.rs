@@ -20,7 +20,8 @@ use model::{Snapshot, TokenInfo};
 #[derive(Parser)]
 #[command(
     version,
-    about = "Terminal UI for Garage: buckets, keys and cluster usage"
+    about = "Terminal UI for Garage: buckets, keys and cluster usage",
+    after_help = "Environment: GARAGE_ADMIN_URL and GARAGE_ADMIN_TOKEN override the config file"
 )]
 struct Args {
     /// Path to the YAML config file (default: ~/.config/garage-tui/config.yaml)

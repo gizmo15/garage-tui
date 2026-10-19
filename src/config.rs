@@ -11,9 +11,16 @@ const DEFAULT_DISK_WARN_PERCENT: f64 = 90.0;
 /// Gap between the yellow (caution) and red (warning) disk gauge thresholds.
 pub const DISK_CAUTION_MARGIN: f64 = 15.0;
 
-#[derive(Debug, Deserialize)]
+const ENV_ADMIN_URL: &str = "GARAGE_ADMIN_URL";
+const ENV_ADMIN_TOKEN: &str = "GARAGE_ADMIN_TOKEN";
+const TOKEN_SOURCE_FILE: &str = "config file";
+const TOKEN_SOURCE_ENV: &str = "environment (GARAGE_ADMIN_TOKEN)";
+
+#[derive(Debug, Default, Deserialize)]
 pub struct Config {
+    #[serde(default)]
     pub admin_url: String,
+    #[serde(default)]
     pub admin_token: Secret,
     #[serde(default)]
     pub refresh_secs: Option<u64>,
@@ -26,6 +33,11 @@ pub struct Config {
     /// Accept any TLS certificate (self-signed). Unsafe: exposes the token to MITM.
     #[serde(default)]
     pub insecure_skip_tls_verify: Option<bool>,
+    /// A config file was read (as opposed to a setup made of environment variables only).
+    #[serde(skip)]
+    has_file: bool,
+    #[serde(skip)]
+    token_from_env: bool,
 }
 
 /// Effective settings shown in the Configuration tab and used by the UI (no secrets).
@@ -33,6 +45,7 @@ pub struct Config {
 pub struct Settings {
     pub admin_url: String,
     pub config_path: Option<String>,
+    pub token_source: &'static str,
     pub refresh_secs: u64,
     pub quota_warn_percent: f64,
     pub disk_warn_percent: f64,
@@ -44,6 +57,7 @@ impl Default for Settings {
         Self {
             admin_url: String::new(),
             config_path: None,
+            token_source: TOKEN_SOURCE_FILE,
             refresh_secs: DEFAULT_REFRESH_SECS,
             quota_warn_percent: DEFAULT_QUOTA_WARN_PERCENT,
             disk_warn_percent: DEFAULT_DISK_WARN_PERCENT,
@@ -87,10 +101,16 @@ impl Config {
     pub fn settings(&self, config_path: Option<&Path>) -> Settings {
         Settings {
             admin_url: self.admin_url.clone(),
-            config_path: config_path
-                .map(Path::to_path_buf)
-                .or_else(default_path)
+            config_path: self
+                .has_file
+                .then(|| config_path.map(Path::to_path_buf).or_else(default_path))
+                .flatten()
                 .map(|p| p.display().to_string()),
+            token_source: if self.token_from_env {
+                TOKEN_SOURCE_ENV
+            } else {
+                TOKEN_SOURCE_FILE
+            },
             refresh_secs: self.refresh_secs(),
             quota_warn_percent: self.quota_warn_percent(),
             disk_warn_percent: self.disk_warn_percent(),
@@ -99,10 +119,8 @@ impl Config {
     }
 
     pub fn from_yaml(content: &str) -> Result<Self> {
-        let config: Config = serde_saphyr::from_str(content).context("invalid YAML config")?;
-        if config.admin_url.trim().is_empty() || config.admin_token.expose().trim().is_empty() {
-            bail!("admin_url and admin_token must not be empty");
-        }
+        let mut config: Config = serde_saphyr::from_str(content).context("invalid YAML config")?;
+        config.has_file = true;
         for (name, value) in [
             ("quota_warn_percent", config.quota_warn_percent),
             ("disk_warn_percent", config.disk_warn_percent),
@@ -112,6 +130,33 @@ impl Config {
             }
         }
         Ok(config)
+    }
+
+    /// Environment variables take precedence over the config file.
+    fn apply_env(&mut self, get: impl Fn(&str) -> Option<String>) {
+        let non_empty = |key: &str| {
+            get(key)
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        };
+        if let Some(url) = non_empty(ENV_ADMIN_URL) {
+            self.admin_url = url;
+        }
+        if let Some(token) = non_empty(ENV_ADMIN_TOKEN) {
+            self.admin_token = Secret::from(token);
+            self.token_from_env = true;
+        }
+    }
+
+    /// Checked after the file and the environment are merged.
+    fn check_required(&self) -> Result<()> {
+        if self.admin_url.trim().is_empty() {
+            bail!("admin_url is missing: set it in the config file or with {ENV_ADMIN_URL}");
+        }
+        if self.admin_token.expose().trim().is_empty() {
+            bail!("admin_token is missing: set it in the config file or with {ENV_ADMIN_TOKEN}");
+        }
+        Ok(())
     }
 }
 
@@ -137,16 +182,40 @@ fn is_cleartext_remote(url: &str) -> bool {
 }
 
 /// Loads the config; returns it with an optional warning (loose permissions, risky transport).
+///
+/// An explicit path must exist. The default path may be absent when the environment provides
+/// the settings (`GARAGE_ADMIN_URL`, `GARAGE_ADMIN_TOKEN`).
 pub fn load(explicit: Option<&Path>) -> Result<(Config, Option<String>)> {
-    let path = match explicit {
-        Some(path) => path.to_path_buf(),
-        None => default_path().context("cannot determine the default config directory")?,
-    };
-    let content = std::fs::read_to_string(&path)
+    load_with(explicit, default_path(), |key| std::env::var(key).ok())
+}
+
+fn read_file(path: &Path) -> Result<Config> {
+    let content = std::fs::read_to_string(path)
         .with_context(|| format!("cannot read config file {}", path.display()))?;
-    let config = Config::from_yaml(&content)
-        .with_context(|| format!("in config file {}", path.display()))?;
-    let warnings: Vec<String> = permissions_warning(&path)
+    Config::from_yaml(&content).with_context(|| format!("in config file {}", path.display()))
+}
+
+fn load_with(
+    explicit: Option<&Path>,
+    default: Option<PathBuf>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<(Config, Option<String>)> {
+    let path = explicit
+        .map(Path::to_path_buf)
+        .or_else(|| default.filter(|p| p.exists()));
+    let mut config = match &path {
+        Some(path) => read_file(path)?,
+        None => Config::default(),
+    };
+    // Read before the environment override: only a secret stored in the file needs chmod 600.
+    let token_in_file = !config.admin_token.expose().trim().is_empty();
+    config.apply_env(env);
+    config.check_required()?;
+    let permissions = path
+        .as_deref()
+        .filter(|_| token_in_file)
+        .and_then(permissions_warning);
+    let warnings: Vec<String> = permissions
         .into_iter()
         .chain(config.security_warnings())
         .collect();
@@ -231,8 +300,99 @@ mod tests {
     fn default_refresh_and_validation() {
         let c = Config::from_yaml("admin_url: u\nadmin_token: t\n").unwrap();
         assert_eq!(c.refresh_secs(), DEFAULT_REFRESH_SECS);
-        assert!(Config::from_yaml("admin_url: ''\nadmin_token: t\n").is_err());
-        assert!(Config::from_yaml("admin_url: u\n").is_err());
+        assert!(
+            Config::from_yaml("admin_url: ''\nadmin_token: t\n")
+                .unwrap()
+                .check_required()
+                .is_err()
+        );
+        assert!(
+            Config::from_yaml("admin_url: u\n")
+                .unwrap()
+                .check_required()
+                .is_err()
+        );
+    }
+
+    fn env<'a>(vars: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |key| {
+            vars.iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| v.to_string())
+        }
+    }
+
+    fn write_yaml(dir: &tempfile::TempDir, yaml: &str, mode: u32) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.path().join("config.yaml");
+        std::fs::write(&path, yaml).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+        path
+    }
+
+    #[test]
+    fn env_token_overrides_the_file() {
+        let (_dir, path) = write_config(0o600);
+        let vars = [(ENV_ADMIN_TOKEN, "from-env")];
+        let (config, warning) = load_with(Some(&path), None, env(&vars)).unwrap();
+        assert_eq!(config.admin_token.expose(), "from-env");
+        assert_eq!(config.admin_url, "https://h:3903");
+        assert_eq!(config.settings(None).token_source, TOKEN_SOURCE_ENV);
+        assert!(warning.is_none());
+        assert!(!format!("{config:?}").contains("from-env"));
+    }
+
+    #[test]
+    fn env_token_with_url_from_a_file_without_secret() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_yaml(&dir, "admin_url: https://h:3903\n", 0o644);
+        let vars = [(ENV_ADMIN_TOKEN, "from-env")];
+        let (config, warning) = load_with(Some(&path), None, env(&vars)).unwrap();
+        assert_eq!(config.admin_url, "https://h:3903");
+        assert_eq!(config.admin_token.expose(), "from-env");
+        assert!(warning.is_none(), "no secret in the file, no chmod warning");
+    }
+
+    #[test]
+    fn world_readable_file_with_token_still_warns_despite_env() {
+        let (_dir, path) = write_config(0o644);
+        let vars = [(ENV_ADMIN_TOKEN, "from-env")];
+        let (_, warning) = load_with(Some(&path), None, env(&vars)).unwrap();
+        assert!(warning.unwrap().contains("chmod 600"));
+    }
+
+    #[test]
+    fn env_alone_replaces_a_missing_default_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("nope.yaml");
+        let vars = [
+            (ENV_ADMIN_URL, "http://127.0.0.1:3903"),
+            (ENV_ADMIN_TOKEN, "t"),
+        ];
+        let (config, warning) = load_with(None, Some(missing), env(&vars)).unwrap();
+        assert_eq!(config.admin_url, "http://127.0.0.1:3903");
+        assert!(warning.is_none());
+        assert_eq!(config.settings(None).config_path, None);
+    }
+
+    #[test]
+    fn missing_explicit_file_is_an_error_even_with_env() {
+        let dir = tempfile::tempdir().unwrap();
+        let vars = [(ENV_ADMIN_URL, "u"), (ENV_ADMIN_TOKEN, "t")];
+        let err = load_with(Some(&dir.path().join("nope.yaml")), None, env(&vars)).unwrap_err();
+        assert!(err.to_string().contains("cannot read config file"));
+    }
+
+    #[test]
+    fn missing_token_or_url_is_reported_and_blank_env_is_ignored() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_yaml(&dir, "admin_url: u\n", 0o600);
+        let vars = [(ENV_ADMIN_TOKEN, "  ")];
+        let err = load_with(Some(&path), None, env(&vars)).unwrap_err();
+        assert!(err.to_string().contains("GARAGE_ADMIN_TOKEN"));
+
+        let err = load_with(None, None, env(&[(ENV_ADMIN_TOKEN, "t")])).unwrap_err();
+        assert!(err.to_string().contains("GARAGE_ADMIN_URL"));
     }
 
     #[test]
