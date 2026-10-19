@@ -1,5 +1,5 @@
 admin_url: http://127.0.0.1:3903
-admin_token: change-me   # [admin] admin_token from garage.toml
+admin_token: change-me   # [admin] admin_token from garage.toml; GARAGE_ADMIN_TOKEN (env) overrides it, so it can be left out
 refresh_secs: 5          # optional
 quota_warn_percent: 85   # optional, bucket quota usage (%) highlighted in red
 disk_warn_percent: 90    # optional, data disk usage (%) where the gauge turns red
