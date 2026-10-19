@@ -30,7 +30,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
         .and_then(|i| keys.get(i))
         .map(|k| {
             let secret = match (&k.secret_access_key, app.show_secret) {
-                (Some(s), true) if app.can_reveal_secrets() => s.clone(),
+                (Some(s), true) if app.can_reveal_secrets() => s.expose().to_string(),
                 _ if !app.can_reveal_secrets() => "********  (admin token required)".to_string(),
                 _ => "********  (press S to reveal)".to_string(),
             };

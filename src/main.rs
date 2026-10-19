@@ -2,6 +2,7 @@ mod app;
 mod client;
 mod config;
 mod model;
+mod secret;
 mod ui;
 
 use std::path::PathBuf;
@@ -38,7 +39,11 @@ enum AppEvent {
 async fn main() -> Result<()> {
     let args = Args::parse();
     let (config, warning) = config::load(args.config.as_deref())?;
-    let client = GarageClient::new(&config.admin_url, &config.admin_token)?;
+    let client = GarageClient::new(
+        &config.admin_url,
+        config.admin_token.expose(),
+        config.insecure_skip_tls_verify(),
+    )?;
 
     let mut terminal = ratatui::init();
     let result = run(

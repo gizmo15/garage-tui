@@ -19,6 +19,15 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
         row("refresh_secs", s.refresh_secs.to_string()),
         row("quota_warn_percent", format!("{}%", s.quota_warn_percent)),
         row("disk_warn_percent", format!("{}%", s.disk_warn_percent)),
+        row(
+            "tls verification",
+            if s.insecure_skip_tls_verify {
+                "DISABLED"
+            } else {
+                "enabled"
+            }
+            .to_string(),
+        ),
     ];
     frame.render_widget(
         Paragraph::new(lines).block(Block::bordered().title("Configuration")),

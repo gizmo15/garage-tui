@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::secret::Secret;
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Quotas {
@@ -188,7 +190,7 @@ pub struct KeyInfo {
     pub created: Option<String>,
     pub expiration: Option<String>,
     pub expired: bool,
-    pub secret_access_key: Option<String>,
+    pub secret_access_key: Option<Secret>,
     pub permissions: KeyPermissions,
     pub buckets: Vec<KeyBucket>,
 }

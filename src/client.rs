@@ -44,9 +44,11 @@ pub struct GarageClient {
 }
 
 impl GarageClient {
-    pub fn new(base_url: &str, token: &str) -> Result<Self, ClientError> {
+    /// `insecure` disables TLS certificate verification (self-signed certificates).
+    pub fn new(base_url: &str, token: &str, insecure: bool) -> Result<Self, ClientError> {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
+            .danger_accept_invalid_certs(insecure)
             .build()?;
         Ok(Self {
             http,
@@ -129,6 +131,12 @@ impl GarageClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secret::Secret;
+
+    #[test]
+    fn client_builds_with_certificate_verification_disabled() {
+        assert!(GarageClient::new("https://garage:3903", "tok", true).is_ok());
+    }
 
     #[test]
     fn extracts_json_message() {
@@ -187,7 +195,7 @@ mod tests {
             r#"{"id":"t1","name":"ro","expired":false,"scope":["ListBuckets"]}"#,
         )
         .await;
-        let client = GarageClient::new(&server.uri(), "tok").unwrap();
+        let client = GarageClient::new(&server.uri(), "tok", false).unwrap();
         let info = client.token_info().await.unwrap();
         assert_eq!(info.name.as_deref(), Some("ro"));
         assert_eq!(info.label(), "read-only");
@@ -196,7 +204,7 @@ mod tests {
     #[tokio::test]
     async fn token_info_unsupported_is_an_error() {
         let server = MockServer::start().await;
-        let client = GarageClient::new(&server.uri(), "tok").unwrap();
+        let client = GarageClient::new(&server.uri(), "tok", false).unwrap();
         let err = client.token_info().await.unwrap_err();
         assert!(matches!(err, ClientError::Status { status: 404, .. }));
     }
@@ -233,11 +241,14 @@ mod tests {
         .await;
 
         // trailing slash in the base url must be tolerated
-        let client = GarageClient::new(&format!("{}/", server.uri()), "tok").unwrap();
+        let client = GarageClient::new(&format!("{}/", server.uri()), "tok", false).unwrap();
         let snap = client.snapshot(true).await.unwrap();
         assert_eq!(snap.buckets.len(), 2);
         assert_eq!(snap.buckets[1].name(), "two");
-        assert_eq!(snap.keys[0].secret_access_key.as_deref(), Some("sek"));
+        assert_eq!(
+            snap.keys[0].secret_access_key.as_ref().map(Secret::expose),
+            Some("sek")
+        );
         assert_eq!(snap.cluster.layout_version, 2);
     }
 
@@ -250,7 +261,7 @@ mod tests {
             .respond_with(json(r#"{"accessKeyId":"GK1","name":"k"}"#))
             .mount(&server)
             .await;
-        let client = GarageClient::new(&server.uri(), "tok").unwrap();
+        let client = GarageClient::new(&server.uri(), "tok", false).unwrap();
         let key = client.key_info("GK1", false).await.unwrap();
         assert!(key.secret_access_key.is_none());
     }
@@ -266,7 +277,7 @@ mod tests {
             ))
             .mount(&server)
             .await;
-        let client = GarageClient::new(&server.uri(), "bad").unwrap();
+        let client = GarageClient::new(&server.uri(), "bad", false).unwrap();
         let err = client.list_buckets().await.unwrap_err();
         assert_eq!(
             err.to_string(),
@@ -277,7 +288,7 @@ mod tests {
 
     #[tokio::test]
     async fn unreachable_server_is_an_http_error() {
-        let client = GarageClient::new("http://127.0.0.1:1", "tok").unwrap();
+        let client = GarageClient::new("http://127.0.0.1:1", "tok", false).unwrap();
         let err = client.cluster_status().await.unwrap_err();
         assert!(matches!(err, ClientError::Http(_)));
         assert!(err.to_string().starts_with("request failed"));

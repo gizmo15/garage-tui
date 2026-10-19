@@ -19,7 +19,10 @@ admin_token: xxxxxxxx
 refresh_secs: 5           # optional
 quota_warn_percent: 85    # optional, default 85
 disk_warn_percent: 90     # optional, default 90 (gauge is yellow 15 points below)
+insecure_skip_tls_verify: false  # optional, true accepts any TLS certificate
 ```
+
+`insecure_skip_tls_verify: true` turns off certificate verification (self-signed certificates). The token is then exposed to a man-in-the-middle, so keep it for trusted networks; a warning stays visible while it is on.
 
 Default path: `~/.config/garage-tui/config.yaml`. Use another file with `-c, --config <PATH>`.
 

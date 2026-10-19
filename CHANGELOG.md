@@ -8,6 +8,9 @@ Version numbers match the `version` field in `Cargo.toml` and the corresponding 
 ## [Unreleased]
 
 ### Added
+- `insecure_skip_tls_verify: true` config key to talk to a Garage behind a self-signed certificate (certificate verification is disabled: use only on a trusted network). A warning is shown while it is active, and the Configuration tab shows the state
+- Warning when `admin_url` is `http://` to a non-loopback host, since the admin token would travel in clear
+- `admin_token` and key secrets are masked in `Debug` output (new `Secret` type) so they cannot leak through logs or panics
 - `quota_warn_percent` (default 85) and `disk_warn_percent` (default 90, yellow 15 points below) config keys replace the hardcoded thresholds; values must be in ]0, 100]
 - Configuration tab (`4`) showing the effective settings (the token is never displayed)
 - Object-count limit shown in the Buckets tab (`42 / 100`, with its percentage in the detail pane) when a `maxObjects` quota is set; it is highlighted in red above the quota threshold like the size quota. Counters come from `GetBucketInfo` and can lag by a few seconds

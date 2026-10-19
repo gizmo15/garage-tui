@@ -185,6 +185,17 @@ mod tests {
     }
 
     #[test]
+    fn terminal_control_characters_from_the_server_are_not_rendered() {
+        let mut app = loaded(Tab::Buckets);
+        app.set_result(Err("bad\x1b[2J\x07 message".into()));
+        app.snapshot.as_mut().unwrap().buckets[0].global_aliases =
+            vec!["evil\x1b]0;pwn\x07".into()];
+        let out = render(&mut app);
+        assert!(!out.chars().any(|c| c.is_control() && c != '\n'));
+        assert!(out.contains("evil"));
+    }
+
+    #[test]
     fn configuration_tab_shows_effective_settings() {
         let mut app = loaded(Tab::Configuration).with_settings(crate::config::Settings {
             quota_warn_percent: 50.0,
@@ -196,6 +207,8 @@ mod tests {
         assert!(out.contains("disk_warn_percent"));
         assert!(out.contains("90%"));
         assert!(out.contains("refresh_secs"));
+        assert!(out.contains("tls verification"));
+        assert!(out.contains("enabled"));
     }
 
     #[test]
