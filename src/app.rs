@@ -400,6 +400,10 @@ mod tests {
         press(&mut app, 'j');
         press(&mut app, '4');
         assert!(app.tab == Tab::Configuration);
+        press(&mut app, '1');
+        assert!(app.tab == Tab::Buckets);
+        assert_eq!(SortBy::Size.label(), "size");
+        press(&mut app, '4');
         app.on_key(key(KeyCode::Tab));
         assert!(app.tab == Tab::Buckets);
         for _ in 0..4 {

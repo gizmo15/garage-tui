@@ -338,6 +338,10 @@ mod tests {
         assert_eq!(token(&[]).kind(), TokenKind::Custom);
         assert_eq!(token(&["ListBuckets"]).label(), "read-only");
         assert_eq!(token(&["*"]).label(), "admin");
+        assert_eq!(
+            token(&["ListBuckets", "CreateBucket"]).label(),
+            "custom: 2 endpoints"
+        );
         assert!(token(&["*"]).is_excessive());
         assert!(!token(READ_ONLY_SCOPE).is_excessive());
         let expired: TokenInfo = serde_json::from_str(r#"{"expired":true,"scope":["*"]}"#).unwrap();
