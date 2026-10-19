@@ -1,3 +1,5 @@
 admin_url: http://127.0.0.1:3903
 admin_token: change-me   # [admin] admin_token from garage.toml
 refresh_secs: 5          # optional
+quota_warn_percent: 85   # optional, bucket quota usage (%) highlighted in red
+disk_warn_percent: 90    # optional, data disk usage (%) where the gauge turns red

@@ -6,6 +6,7 @@ use ratatui::{
 };
 
 use crate::app::App;
+use crate::config::DISK_CAUTION_MARGIN;
 use crate::model::{Node, human_bytes};
 
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
@@ -33,11 +34,11 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     // Two lines per node: header text + gauge.
     let rows = Layout::vertical(cluster.nodes.iter().map(|_| Constraint::Length(2))).split(inner);
     for (node, row) in cluster.nodes.iter().zip(rows.iter()) {
-        draw_node(frame, *row, node);
+        draw_node(frame, *row, node, app.settings.disk_warn_percent);
     }
 }
 
-fn draw_node(frame: &mut Frame, area: Rect, node: &Node) {
+fn draw_node(frame: &mut Frame, area: Rect, node: &Node, disk_warn_percent: f64) {
     let [title, gauge] =
         Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
     let name = node
@@ -59,9 +60,9 @@ fn draw_node(frame: &mut Frame, area: Rect, node: &Node) {
     if let Some(p) = node.data_partition.as_ref().filter(|p| p.total > 0) {
         let used = p.total.saturating_sub(p.available);
         let ratio = (used as f64 / p.total as f64).clamp(0.0, 1.0);
-        let gauge_color = if ratio > 0.9 {
+        let gauge_color = if ratio * 100.0 > disk_warn_percent {
             Color::Red
-        } else if ratio > 0.75 {
+        } else if ratio * 100.0 > disk_warn_percent - DISK_CAUTION_MARGIN {
             Color::Yellow
         } else {
             Color::Cyan

@@ -41,7 +41,14 @@ async fn main() -> Result<()> {
     let client = GarageClient::new(&config.admin_url, &config.admin_token)?;
 
     let mut terminal = ratatui::init();
-    let result = run(&mut terminal, client, &config, warning).await;
+    let result = run(
+        &mut terminal,
+        client,
+        &config,
+        args.config.as_deref(),
+        warning,
+    )
+    .await;
     ratatui::restore();
     result
 }
@@ -50,10 +57,11 @@ async fn run(
     terminal: &mut ratatui::DefaultTerminal,
     client: GarageClient,
     config: &config::Config,
+    config_path: Option<&std::path::Path>,
     warning: Option<String>,
 ) -> Result<()> {
     let (tx, mut rx) = mpsc::unbounded_channel();
-    let mut app = App::new(warning);
+    let mut app = App::new(warning).with_settings(config.settings(config_path));
 
     // Terminal input runs on its own thread, crossterm's poll is blocking.
     let key_tx = tx.clone();

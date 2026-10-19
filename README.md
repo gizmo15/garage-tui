@@ -16,7 +16,9 @@ YAML file with the admin URL and token (copy `config.example.yaml`, then `chmod 
 ```yaml
 admin_url: http://127.0.0.1:3903
 admin_token: xxxxxxxx
-refresh_secs: 5   # optional
+refresh_secs: 5           # optional
+quota_warn_percent: 85    # optional, default 85
+disk_warn_percent: 90     # optional, default 90 (gauge is yellow 15 points below)
 ```
 
 Default path: `~/.config/garage-tui/config.yaml`. Use another file with `-c, --config <PATH>`.
@@ -34,13 +36,13 @@ garage admin-token create garage-tui-ro --expires-in 90d \
 cargo run -- --config ./config.yaml
 ```
 
-Buckets using more than 85% of their size or object-count quota are highlighted in red; the object limit is shown next to the count (`42 / 100`). Garage's counters can lag by a few seconds.
+Buckets using more than `quota_warn_percent` (default 85%) of their size or object-count quota are highlighted in red; the object limit is shown next to the count (`42 / 100`). Garage's counters can lag by a few seconds.
 
 ## Keys
 
 | Key | Action |
 |---|---|
-| `Tab`, `1`-`3` | Buckets / Keys / Cluster |
+| `Tab`, `1`-`4` | Buckets / Keys / Cluster / Configuration |
 | `j` `k` / arrows | move |
 | `/` | filter (Enter/Esc to stop, Esc again to clear) |
 | `s` | sort buckets (name, size, objects) |

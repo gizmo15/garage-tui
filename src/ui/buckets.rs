@@ -20,6 +20,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
     let [list, detail] =
         Layout::horizontal([Constraint::Percentage(60), Constraint::Percentage(40)]).areas(area);
 
+    let threshold = app.settings.quota_warn_percent;
     let buckets = app.visible_buckets();
     let rows: Vec<Row> = buckets
         .iter()
@@ -40,10 +41,10 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
                 None => b.objects.to_string(),
             };
             Row::new(vec![
-                cell(b.name(), b.quota_nearly_full()),
+                cell(b.name(), b.quota_nearly_full(threshold)),
                 Cell::new(human_bytes(b.bytes)),
-                cell(objects, b.objects_nearly_full()),
-                cell(quota, b.size_nearly_full()),
+                cell(objects, b.objects_nearly_full(threshold)),
+                cell(quota, b.size_nearly_full(threshold)),
             ])
         })
         .collect();
@@ -70,11 +71,11 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App) {
                 format!(
                     "quota:    size {}{} / objects {}{}",
                     b.quotas.max_size.map_or("none".into(), human_bytes),
-                    warn(b.size_nearly_full(), b.quota_percent()),
+                    warn(b.size_nearly_full(threshold), b.quota_percent()),
                     b.quotas
                         .max_objects
                         .map_or("none".into(), |n| n.to_string()),
-                    warn(b.objects_nearly_full(), b.objects_percent()),
+                    warn(b.objects_nearly_full(threshold), b.objects_percent()),
                 ),
                 String::new(),
                 "keys:".to_string(),

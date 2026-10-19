@@ -1,5 +1,6 @@
 mod buckets;
 mod cluster;
+mod configuration;
 mod keys;
 
 use ratatui::{
@@ -33,6 +34,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, url: &str) {
         Tab::Buckets => buckets::draw(frame, body, app),
         Tab::Keys => keys::draw(frame, body, app),
         Tab::Cluster => cluster::draw(frame, body, app),
+        Tab::Configuration => configuration::draw(frame, body, app),
     }
 
     frame.render_widget(Paragraph::new(status_line(app, url)), status);
@@ -47,7 +49,7 @@ pub fn draw(frame: &mut Frame, app: &mut App, url: &str) {
             "  S: secrets off".to_string()
         };
         format!(
-            "Tab/1-3: tabs  j/k: move  /: filter  s: sort ({}){secrets}  r: refresh  q: quit",
+            "Tab/1-4: tabs  j/k: move  /: filter  s: sort ({}){secrets}  r: refresh  q: quit",
             app.sort.label(),
         )
     };
@@ -180,6 +182,20 @@ mod tests {
         let out = render(&mut app);
         assert!(out.contains("expired"));
         assert!(out.contains("2026-02-01"));
+    }
+
+    #[test]
+    fn configuration_tab_shows_effective_settings() {
+        let mut app = loaded(Tab::Configuration).with_settings(crate::config::Settings {
+            quota_warn_percent: 50.0,
+            ..Default::default()
+        });
+        let out = render(&mut app);
+        assert!(out.contains("quota_warn_percent"));
+        assert!(out.contains("50%"));
+        assert!(out.contains("disk_warn_percent"));
+        assert!(out.contains("90%"));
+        assert!(out.contains("refresh_secs"));
     }
 
     #[test]

@@ -26,9 +26,6 @@ impl Perms {
     }
 }
 
-/// Size-quota usage above which a bucket is highlighted.
-pub const QUOTA_WARN_PERCENT: f64 = 85.0;
-
 /// Endpoints used by the app, all read-only.
 const READ_ONLY_SCOPE: &[&str] = &[
     "ListBuckets",
@@ -125,18 +122,17 @@ impl BucketInfo {
             .unwrap_or_else(|| self.id.chars().take(12).collect())
     }
 
-    /// True when the size or the object quota is more than `QUOTA_WARN_PERCENT` used.
-    pub fn quota_nearly_full(&self) -> bool {
-        self.size_nearly_full() || self.objects_nearly_full()
+    /// True when the size or the object quota is more than `threshold` percent used.
+    pub fn quota_nearly_full(&self, threshold: f64) -> bool {
+        self.size_nearly_full(threshold) || self.objects_nearly_full(threshold)
     }
 
-    pub fn size_nearly_full(&self) -> bool {
-        self.quota_percent().is_some_and(|p| p > QUOTA_WARN_PERCENT)
+    pub fn size_nearly_full(&self, threshold: f64) -> bool {
+        self.quota_percent().is_some_and(|p| p > threshold)
     }
 
-    pub fn objects_nearly_full(&self) -> bool {
-        self.objects_percent()
-            .is_some_and(|p| p > QUOTA_WARN_PERCENT)
+    pub fn objects_nearly_full(&self, threshold: f64) -> bool {
+        self.objects_percent().is_some_and(|p| p > threshold)
     }
 
     /// Percentage of the size quota used, if a size quota is set.
@@ -358,10 +354,11 @@ mod tests {
             },
             ..Default::default()
         };
-        assert!(!bucket(85, Some(100)).quota_nearly_full());
-        assert!(bucket(86, Some(100)).quota_nearly_full());
-        assert!(!bucket(1000, None).quota_nearly_full());
-        assert!(!bucket(1000, Some(0)).quota_nearly_full());
+        assert!(!bucket(85, Some(100)).quota_nearly_full(85.0));
+        assert!(bucket(86, Some(100)).quota_nearly_full(85.0));
+        assert!(bucket(51, Some(100)).quota_nearly_full(50.0));
+        assert!(!bucket(1000, None).quota_nearly_full(85.0));
+        assert!(!bucket(1000, Some(0)).quota_nearly_full(85.0));
     }
 
     #[test]
@@ -377,9 +374,9 @@ mod tests {
         assert_eq!(bucket(42, Some(100)).objects_percent(), Some(42.0));
         assert_eq!(bucket(42, None).objects_percent(), None);
         assert_eq!(bucket(42, Some(0)).objects_percent(), None);
-        assert!(!bucket(85, Some(100)).quota_nearly_full());
-        assert!(bucket(86, Some(100)).quota_nearly_full());
-        assert!(bucket(86, Some(100)).objects_nearly_full());
-        assert!(!bucket(86, Some(100)).size_nearly_full());
+        assert!(!bucket(85, Some(100)).quota_nearly_full(85.0));
+        assert!(bucket(86, Some(100)).quota_nearly_full(85.0));
+        assert!(bucket(86, Some(100)).objects_nearly_full(85.0));
+        assert!(!bucket(86, Some(100)).size_nearly_full(85.0));
     }
 }

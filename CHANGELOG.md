@@ -8,7 +8,9 @@ Version numbers match the `version` field in `Cargo.toml` and the corresponding 
 ## [Unreleased]
 
 ### Added
-- Object-count limit shown in the Buckets tab (`42 / 100`, with its percentage in the detail pane) when a `maxObjects` quota is set; it is highlighted in red above 85% like the size quota. Counters come from `GetBucketInfo` and can lag by a few seconds
+- `quota_warn_percent` (default 85) and `disk_warn_percent` (default 90, yellow 15 points below) config keys replace the hardcoded thresholds; values must be in ]0, 100]
+- Configuration tab (`4`) showing the effective settings (the token is never displayed)
+- Object-count limit shown in the Buckets tab (`42 / 100`, with its percentage in the detail pane) when a `maxObjects` quota is set; it is highlighted in red above the quota threshold like the size quota. Counters come from `GetBucketInfo` and can lag by a few seconds
 - Secret keys can only be revealed (`S`) with an admin token (scope `*`) or the static config token; for any other token the key is disabled and the help line hides it. This is a UI safeguard: to truly prevent access, leave `GetKeyInfo` out of the token scope
 - Buckets whose size-quota usage exceeds 85% are shown in bold red in the list, and flagged in the detail pane
 - Token badge in the status bar (`admin`, `read-only`, `custom: N endpoints`, `expired`) from `GET /v2/GetCurrentAdminTokenInfo`; hidden when the lookup fails (static config token, older Garage)

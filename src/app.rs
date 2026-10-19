@@ -1,6 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::widgets::TableState;
 
+use crate::config::Settings;
 use crate::model::{BucketInfo, KeyInfo, Snapshot, TokenInfo, TokenKind};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -8,16 +9,18 @@ pub enum Tab {
     Buckets,
     Keys,
     Cluster,
+    Configuration,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 3] = [Tab::Buckets, Tab::Keys, Tab::Cluster];
+    pub const ALL: [Tab; 4] = [Tab::Buckets, Tab::Keys, Tab::Cluster, Tab::Configuration];
 
     pub fn title(self) -> &'static str {
         match self {
             Tab::Buckets => "Buckets",
             Tab::Keys => "Keys",
             Tab::Cluster => "Cluster",
+            Tab::Configuration => "Configuration",
         }
     }
 
@@ -75,6 +78,7 @@ pub struct App {
     pub last_refresh: Option<String>,
     pub loading: bool,
     pub token: Option<TokenInfo>,
+    pub settings: Settings,
 }
 
 impl App {
@@ -93,7 +97,13 @@ impl App {
             last_refresh: None,
             loading: true,
             token: None,
+            settings: Settings::default(),
         }
+    }
+
+    pub fn with_settings(mut self, settings: Settings) -> Self {
+        self.settings = settings;
+        self
     }
 
     /// A failed lookup (static config token, older Garage) just leaves the badge unknown.
@@ -164,7 +174,7 @@ impl App {
         match self.tab {
             Tab::Buckets => self.visible_buckets().len(),
             Tab::Keys => self.visible_keys().len(),
-            Tab::Cluster => 0,
+            Tab::Cluster | Tab::Configuration => 0,
         }
     }
 
@@ -172,7 +182,7 @@ impl App {
         match self.tab {
             Tab::Buckets => Some(&mut self.buckets_state),
             Tab::Keys => Some(&mut self.keys_state),
-            Tab::Cluster => None,
+            Tab::Cluster | Tab::Configuration => None,
         }
     }
 
@@ -220,6 +230,7 @@ impl App {
             KeyCode::Char('1') => self.tab = Tab::Buckets,
             KeyCode::Char('2') => self.tab = Tab::Keys,
             KeyCode::Char('3') => self.tab = Tab::Cluster,
+            KeyCode::Char('4') => self.tab = Tab::Configuration,
             KeyCode::Down | KeyCode::Char('j') => self.move_selection(1),
             KeyCode::Up | KeyCode::Char('k') => self.move_selection(-1),
             KeyCode::Char('/') => self.editing_filter = true,
@@ -387,11 +398,13 @@ mod tests {
         assert!(app.tab == Tab::Cluster);
         // navigation on the cluster tab is a no-op
         press(&mut app, 'j');
-        press(&mut app, '1');
+        press(&mut app, '4');
+        assert!(app.tab == Tab::Configuration);
+        app.on_key(key(KeyCode::Tab));
         assert!(app.tab == Tab::Buckets);
-        app.on_key(key(KeyCode::Tab));
-        app.on_key(key(KeyCode::Tab));
-        app.on_key(key(KeyCode::Tab));
+        for _ in 0..4 {
+            app.on_key(key(KeyCode::Tab));
+        }
         assert!(app.tab == Tab::Buckets);
         assert_eq!(Tab::Cluster.title(), "Cluster");
         assert_eq!(Tab::Keys.index(), 1);
