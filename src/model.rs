@@ -124,6 +124,17 @@ impl BucketInfo {
             .unwrap_or_else(|| self.id.chars().take(12).collect())
     }
 
+    /// Orders keys by name (case-insensitive), then by access key id, so the
+    /// listing does not depend on the order returned by the server.
+    pub fn sort_keys(&mut self) {
+        self.keys.sort_by(|a, b| {
+            a.name
+                .to_lowercase()
+                .cmp(&b.name.to_lowercase())
+                .then_with(|| a.access_key_id.cmp(&b.access_key_id))
+        });
+    }
+
     /// True when the size or the object quota is more than `threshold` percent used.
     pub fn quota_nearly_full(&self, threshold: f64) -> bool {
         self.size_nearly_full(threshold) || self.objects_nearly_full(threshold)
@@ -384,5 +395,25 @@ mod tests {
         assert!(bucket(86, Some(100)).quota_nearly_full(85.0));
         assert!(bucket(86, Some(100)).objects_nearly_full(85.0));
         assert!(!bucket(86, Some(100)).size_nearly_full(85.0));
+    }
+
+    #[test]
+    fn sort_keys_is_deterministic() {
+        let key = |name: &str, id: &str| BucketKey {
+            name: name.into(),
+            access_key_id: id.into(),
+            ..Default::default()
+        };
+        let mut bucket = BucketInfo {
+            keys: vec![key("beta", "2"), key("Alpha", "9"), key("beta", "1")],
+            ..Default::default()
+        };
+        bucket.sort_keys();
+        let ids: Vec<_> = bucket
+            .keys
+            .iter()
+            .map(|k| k.access_key_id.as_str())
+            .collect();
+        assert_eq!(ids, ["9", "1", "2"]);
     }
 }
