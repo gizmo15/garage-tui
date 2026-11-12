@@ -409,7 +409,11 @@ mod tests {
             ..Default::default()
         };
         bucket.sort_keys();
-        let ids: Vec<_> = bucket.keys.iter().map(|k| k.access_key_id.as_str()).collect();
+        let ids: Vec<_> = bucket
+            .keys
+            .iter()
+            .map(|k| k.access_key_id.as_str())
+            .collect();
         assert_eq!(ids, ["9", "1", "2"]);
     }
 }
