@@ -87,7 +87,9 @@ impl GarageClient {
     }
 
     pub async fn bucket_info(&self, id: &str) -> Result<BucketInfo, ClientError> {
-        self.get("/v2/GetBucketInfo", &[("id", id)]).await
+        let mut info: BucketInfo = self.get("/v2/GetBucketInfo", &[("id", id)]).await?;
+        info.sort_keys();
+        Ok(info)
     }
 
     pub async fn list_keys(&self) -> Result<Vec<KeySummary>, ClientError> {
