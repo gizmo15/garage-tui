@@ -226,6 +226,38 @@ mod tests {
     }
 
     #[test]
+    fn cluster_disk_usage_text_is_not_covered_by_the_bar() {
+        let mut app = loaded(Tab::Cluster);
+        let mut terminal = Terminal::new(TestBackend::new(140, 30)).unwrap();
+        terminal
+            .draw(|frame| draw(frame, &mut app, "http://garage:3903"))
+            .unwrap();
+        let buffer = terminal.backend().buffer().clone();
+        let rows: Vec<_> = buffer
+            .content()
+            .chunks(buffer.area.width as usize)
+            .filter(|r| {
+                r.iter()
+                    .map(|c| c.symbol())
+                    .collect::<String>()
+                    .contains("data ")
+            })
+            .collect();
+        assert!(!rows.is_empty());
+        for row in rows {
+            let symbols: Vec<&str> = row.iter().map(|c| c.symbol()).collect();
+            let start = (0..symbols.len())
+                .find(|&i| symbols[i..].concat().starts_with("data "))
+                .unwrap();
+            // from the text to the right border: no bar glyph, no colour
+            for cell in &row[start..row.len() - 1] {
+                assert_ne!(cell.symbol(), "█");
+                assert_eq!((cell.fg, cell.bg), (Color::Reset, Color::Reset));
+            }
+        }
+    }
+
+    #[test]
     fn empty_states_do_not_panic() {
         let mut app = App::new(None);
         for tab in Tab::ALL {
