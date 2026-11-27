@@ -9,6 +9,9 @@ use crate::app::App;
 use crate::config::DISK_CAUTION_MARGIN;
 use crate::model::{Node, human_bytes};
 
+/// Width of the disk usage text, enough for "data 1023.99 GiB / 1023.99 GiB (100%)".
+const DISK_TEXT_WIDTH: u16 = 38;
+
 pub fn draw(frame: &mut Frame, area: Rect, app: &App) {
     let Some(snapshot) = &app.snapshot else {
         frame.render_widget(
@@ -67,17 +70,26 @@ fn draw_node(frame: &mut Frame, area: Rect, node: &Node, disk_warn_percent: f64)
         } else {
             Color::Cyan
         };
+        // The text sits beside the bar: drawn over it, the fill colour makes it unreadable.
+        let [bar, text] =
+            Layout::horizontal([Constraint::Min(0), Constraint::Length(DISK_TEXT_WIDTH)])
+                .spacing(1)
+                .areas(gauge);
         frame.render_widget(
             Gauge::default()
                 .ratio(ratio)
                 .gauge_style(Style::new().fg(gauge_color))
-                .label(format!(
-                    "data {} / {} ({:.0}%)",
-                    human_bytes(used),
-                    human_bytes(p.total),
-                    ratio * 100.0
-                )),
-            gauge,
+                .label(""),
+            bar,
+        );
+        frame.render_widget(
+            Paragraph::new(format!(
+                "data {} / {} ({:.0}%)",
+                human_bytes(used),
+                human_bytes(p.total),
+                ratio * 100.0
+            )),
+            text,
         );
     } else {
         frame.render_widget(Paragraph::new("no disk info"), gauge);

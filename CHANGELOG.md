@@ -7,6 +7,9 @@ Version numbers match the `version` field in `Cargo.toml` and the corresponding 
 
 ## [Unreleased]
 
+### Fixed
+- Cluster tab: the disk usage figures are shown to the right of the gauge instead of over it, where the fill colour made them unreadable on well-filled nodes
+
 ### Added
 - `GARAGE_ADMIN_TOKEN` / `GARAGE_ADMIN_URL` environment variables override `admin_token` / `admin_url` from the config file (precedence env > file); the config file is optional when both are set (`-c` still requires it). The Configuration tab shows whether the token comes from the file or the environment
 
